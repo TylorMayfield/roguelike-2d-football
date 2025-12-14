@@ -1,12 +1,12 @@
 /**
- * Main Entry Point - Roguelike 2D Football
+ * Main Entry Point - Roguelike 2D Soccer
  * 
  * This file orchestrates all game systems.
  * Individual responsibilities are delegated to:
  * - SceneManager: Three.js scene/camera/renderer
  * - AssetLoader: Texture loading
  * - TeamManager: Player/formation management
- * - GamePhysics: Movement/collisions/ball logic
+ * - SoccerPhysics: Movement/collisions/ball logic
  * - HUDManager: UI updates
  */
 
@@ -21,15 +21,14 @@ import { InputManager } from '../core/InputManager';
 import { SceneManager } from './SceneManager';
 import { AssetLoader } from './AssetLoader';
 import { HUDManager } from './HUDManager';
-import { FieldRenderer } from './FieldRenderer';
 
 // Game
-import { FootballRules, PlayState } from '../game/FootballRules';
+import { SoccerRules, PlayState } from '../game/SoccerRules';
 import { TeamManager } from '../game/TeamManager';
 import { TileMap } from '../game/TileMap';
 
 // Physics
-import { GamePhysics } from '../physics/GamePhysics';
+import { SoccerPhysics } from '../physics/SoccerPhysics';
 
 // React UI
 import React from 'react';
@@ -48,50 +47,31 @@ if (rootEl) {
 // Generate procedural assets
 AssetLoader.generateProceduralAssets();
 
-// Field
-const tileMap = new TileMap(120, 54, 1);
-const fieldRenderer = new FieldRenderer(SceneManager.scene);
-fieldRenderer.createField(tileMap);
-
-// Stadium Background
-const stadiumGeo = new THREE.PlaneGeometry(200, 100);
-const stadiumMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
-const stadiumMesh = new THREE.Mesh(stadiumGeo, stadiumMat);
-stadiumMesh.position.z = -1;
-SceneManager.add(stadiumMesh);
-
-// Game Rules
-const footballRules = new FootballRules();
+// Create soccer rules
+const soccerRules = new SoccerRules();
 
 // Input & Game Manager
 const inputManager = new InputManager();
 const gameManager = new GameManager(
     () => {
         console.log('Game Started!');
-        footballRules.resetGame();
-        TeamManager.resetPositions(footballRules);
+        soccerRules.resetMatch();
     },
     inputManager
 );
 
-// HUDManager (Store) initialized via imports
-
+// TileMap (for collision if needed)
+const tileMap = new TileMap(120, 80, 1);
 
 // Load external assets then initialize teams
 AssetLoader.loadExternalAssets().then(() => {
-    // Initialize team entities
-    TeamManager.init(footballRules);
-    TeamManager.resetPositions(footballRules);
-    
-    // Spawn fans
-    // const fanTexture = AssetLoader.textures['fan'];
-    // if (fanTexture) {
-    //     TeamManager.spawnFans(fanTexture);
-    // }
+    // Initialize team entities (will need to update for soccer formations)
+    // TeamManager.init(soccerRules as any);
+    console.log('Assets loaded, soccer ready!');
 });
 
-// Initialize physics
-GamePhysics.init(inputManager, gameManager, footballRules, tileMap);
+// Initialize soccer physics (creates field and ball)
+SoccerPhysics.init(inputManager, gameManager);
 
 // ============ MAIN LOOP ============
 
@@ -100,21 +80,15 @@ function animate() {
     
     // Update game systems
     gameManager.update();
-    GamePhysics.update();
-    GamePhysics.updateFormations();
-    HUDManager.update(footballRules);
+    SoccerPhysics.update();
     
-    // Update Fans
-    TeamManager.fans.forEach(f => f.update(16));
+    // Update HUD with soccer-specific info
+    // HUDManager.updateSoccer(soccerRules);
     
-    // Update Referee
-    if (TeamManager.referee) {
-        TeamManager.referee.update(16);
-    }
-    
-    // Camera follow
-    if (TeamManager.player) {
-        SceneManager.followTarget(TeamManager.player.position);
+    // Camera follow controlled player
+    const cameraTarget = SoccerPhysics.getCameraTarget();
+    if (cameraTarget) {
+        SceneManager.followTarget(cameraTarget);
     }
     
     // Render

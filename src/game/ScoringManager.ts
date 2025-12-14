@@ -62,16 +62,19 @@ export class ScoringManager {
     }
 
     /**
-     * Check if position is a touchdown.
+     * Check if position is a touchdown (direction-aware).
+     * Home team scores at +50, Away team scores at -50.
      */
-    public static isTouchdown(lineOfScrimmage: number): boolean {
-        return lineOfScrimmage >= 50;
+    public static isTouchdown(lineOfScrimmage: number, possession: Team): boolean {
+        return possession === 'home' ? lineOfScrimmage >= 50 : lineOfScrimmage <= -50;
     }
 
     /**
-     * Check if position is a safety.
+     * Check if position is a safety (direction-aware).
+     * Home team gets tackled in own endzone at -50, Away at +50.
      */
-    public static isSafety(lineOfScrimmage: number): boolean {
-        return lineOfScrimmage <= -50;
+    public static isSafety(lineOfScrimmage: number, possession: Team): boolean {
+        return possession === 'home' ? lineOfScrimmage <= -50 : lineOfScrimmage >= 50;
     }
 }
+

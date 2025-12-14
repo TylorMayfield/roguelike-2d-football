@@ -112,23 +112,38 @@ export class Player {
     }
   }
 
-  private addPonytail(color: THREE.Color) {
-      // Procedural Ponytail Texture
-      const hairColor = new THREE.Color(0x3B240B); // Dark Brown
-      const size = 32;
+  private addPonytail(skinColor: THREE.Color) {
+      // Varied hair colors
+      const hairColors = [
+          new THREE.Color(0x3B240B), // Dark Brown
+          new THREE.Color(0x000000), // Black
+          new THREE.Color(0x8B4513), // Light Brown  
+          new THREE.Color(0xD4A574), // Blonde
+          new THREE.Color(0xB7410E), // Auburn
+          new THREE.Color(0x2C1810), // Dark
+      ];
+      const hairColor = hairColors[Math.floor(Math.random() * hairColors.length)];
+      
+      // Create ponytail texture (larger, more detailed)
+      const size = 64;
       const data = new Uint8Array(size * size * 4);
       
       for (let i = 0; i < size * size; i++) {
           const x = i % size;
           const y = Math.floor(i / size);
+          const cx = 32, cy = 20;
           
-          // Draw a simple shape (e.g. oval/teardrop)
-          const dx = x - 16;
-          const dy = y - 16;
-          if (dx*dx*2 + dy*dy < 100) { // Ovalish
-              data[i * 4] = hairColor.r * 255;
-              data[i * 4 + 1] = hairColor.g * 255;
-              data[i * 4 + 2] = hairColor.b * 255;
+          // Teardrop shape (wider at top, narrower at bottom)
+          const dx = x - cx;
+          const dy = y - cy;
+          const widthFactor = 1 + (y / size) * 0.5;
+          
+          if ((dx * dx) / (200 * widthFactor) + (dy * dy) / 400 < 1) {
+              // Add some shading for depth
+              const shade = 0.8 + Math.random() * 0.2;
+              data[i * 4] = hairColor.r * 255 * shade;
+              data[i * 4 + 1] = hairColor.g * 255 * shade;
+              data[i * 4 + 2] = hairColor.b * 255 * shade;
               data[i * 4 + 3] = 255;
           } else {
               data[i * 4 + 3] = 0;
@@ -138,13 +153,12 @@ export class Player {
       const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
       texture.needsUpdate = true;
       
-      const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
-      const geo = new THREE.PlaneGeometry(0.4, 0.4);
+      const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
+      const geo = new THREE.PlaneGeometry(0.6, 0.8); // Larger ponytail
       this.ponytail = new THREE.Mesh(geo, mat);
       
-      // Position relative to head (assuming 1x1 sprite, head is top center)
-      // Base sprite center is (0,0). Head is likely around y = 0.2
-      this.ponytail.position.set(0, 0.1, -0.1); // Behind head
+      // Position behind and above head
+      this.ponytail.position.set(0, 0.3, -0.15);
       this.mesh.add(this.ponytail);
   }
 
@@ -214,12 +228,22 @@ export class Player {
          // end of animation loop
     }
     
-    // Animate Ponytail (simple bob)
+    // Animate Ponytail (realistic sway based on movement)
     if (this.ponytail) {
-        // Bob up/down based on walk cycle?
-        // Or just velocity?
-        const bob = Math.sin(Date.now() / 100) * 0.05;
-        this.ponytail.position.y = 0.1 + (this.velocity.length() > 0 ? bob : 0);
+        const speed = this.velocity.length();
+        const time = Date.now() / 100;
+        
+        // Bob up/down with running
+        const bob = Math.sin(time * 2) * 0.05 * (speed > 0.1 ? 1 : 0.2);
+        this.ponytail.position.y = 0.3 + bob;
+        
+        // Sway side to side based on velocity
+        const swayX = -this.velocity.x * 0.3;
+        const swayY = -this.velocity.y * 0.15;
+        this.ponytail.position.x = swayX + Math.sin(time) * 0.02;
+        
+        // Rotate to trail behind
+        this.ponytail.rotation.z = swayX * 0.5 + Math.sin(time * 1.5) * 0.1;
     }
   }
   
