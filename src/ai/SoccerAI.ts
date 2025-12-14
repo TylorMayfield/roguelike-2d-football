@@ -248,15 +248,33 @@ export class SoccerAI {
     }
     
     private calculateFormationTarget() {
-        const ballInfluence = 0.2 * (1 - this.positioningStrictness);
-        const targetX = this.formationPos.x + this.ballPosition.x * ballInfluence;
-        const targetY = this.formationPos.y + this.ballPosition.y * ballInfluence * 0.3;
+        // More fluid formation - drift with the ball significantly
+        // This makes the team shape "shift" up and down the pitch with play
+        const ballInfluenceX = 0.5 * (1 - this.positioningStrictness);
+        const ballInfluenceY = 0.3; // Always shift Y a bit
+        
+        let targetX = this.formationPos.x + this.ballPosition.x * ballInfluenceX;
+        const targetY = this.formationPos.y + this.ballPosition.y * ballInfluenceY;
+        
+        // Clamp X to reasonable field areas based on position
+        if (this.role === PlayerRole.DEFENDER) {
+            // Defenders shouldn't go too far forward
+            const goalX = this.player.team === 'home' ? -60 : 60;
+            const maxX = this.player.team === 'home' ? 10 : -10;
+            targetX = Math.max(Math.min(targetX, Math.max(goalX, maxX)), Math.min(goalX, maxX)); 
+            // Simplified clamping logic: 
+            if (this.player.team === 'home') targetX = Math.min(targetX, 0); 
+            else targetX = Math.max(targetX, 0); 
+        }
+        
         this.targetPosition.set(targetX, targetY, 0);
     }
     
     private calculateSupportTarget() {
-        // Attackers push forward more
-        const forwardBias = this.role === PlayerRole.ATTACKER ? 10 : 0;
+        // Attackers push forward more to receive through balls
+        const forwardDir = this.player.team === 'home' ? 1 : -1;
+        const forwardBias = this.role === PlayerRole.ATTACKER ? 20 * forwardDir : 5 * forwardDir;
+        
         this.targetPosition.set(
             Math.max(-55, Math.min(55, this.ballPosition.x + this.supportOffset.x + forwardBias)),
             Math.max(-35, Math.min(35, this.ballPosition.y + this.supportOffset.y)),
@@ -266,11 +284,18 @@ export class SoccerAI {
     
     private calculateDefendTarget() {
         const goalX = this.player.team === 'home' ? -60 : 60;
-        // Defenders stay deeper
-        const depth = this.role === PlayerRole.DEFENDER ? 0.6 : 0.4;
-        const midX = goalX + (this.ballPosition.x - goalX) * depth;
-        const midY = this.ballPosition.y * 0.4;
-        this.targetPosition.set(midX, midY, 0);
+        
+        // Stay between ball and goal!
+        // Lerp factor determines "how deep" to drop
+        const depth = this.role === PlayerRole.DEFENDER ? 0.3 : 0.6; 
+        // 0.3 means closer to goal (30% from goal to ball)
+        
+        const targetX = goalX + (this.ballPosition.x - goalX) * depth;
+        // Match ball Y for blocking, but keep some formation width
+        const widthResist = 0.5;
+        const targetY = this.formationPos.y * widthResist + this.ballPosition.y * (1 - widthResist);
+        
+        this.targetPosition.set(targetX, targetY, 0);
     }
     
     private calculateMarkTarget(opponent: SoccerPlayer) {

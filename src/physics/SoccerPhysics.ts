@@ -46,6 +46,7 @@ class SoccerPhysicsClass {
         // Add ball and its shadow to scene
         SceneManager.add(this.ball.shadow);
         SceneManager.add(this.ball.mesh);
+        
         this.spawnTeams();
         
         console.log("Soccer with player stats initialized!");
@@ -267,20 +268,33 @@ class SoccerPhysicsClass {
             
             // Ball follows player with small offset based on movement
             const vel = this.controlledPlayer.velocity;
-            const offsetX = vel.x * 4; // Increased offset
-            const offsetY = vel.y * 4;
             
+            // Calculate dynamic offset based on velocity
+            // If stopped, keep relative direction but clamp distance
+            let offsetX = vel.x * 3.0; 
+            let offsetY = vel.y * 3.0;
+            
+            // If moving very slowly, just keep ball in front (default to current side)
+            if (vel.length() < 0.01) {
+                // Determine facing from current relative position
+                const relX = this.ball.position.x - playerPos.x;
+                const facing = relX > 0 ? 1 : -1; 
+                offsetX = facing * 1.0; 
+                offsetY = 0;
+            }
+
             // Ball position in front of player
-            const targetX = playerPos.x + offsetX + 1.5; // Further in front
+            const targetX = playerPos.x + offsetX; 
             const targetY = playerPos.y + offsetY;
             
-            // Smooth but loose dribble - ball doesn't stick perfectly
-            const easeFactor = 0.15; // Slower easing = looser control
+            // Tight response - ball snaps to position faster
+            const easeFactor = 0.25; 
             this.ball.position.x += (targetX - this.ball.position.x) * easeFactor;
             this.ball.position.y += (targetY - this.ball.position.y) * easeFactor;
             
-            // Only slow ball, don't stop it completely
-            this.ball.velocity.multiplyScalar(0.8);
+            // Match velocity for continuity
+            this.ball.velocity.lerp(vel, 0.3); // Inherit more velocity
+            this.ball.velocity.multiplyScalar(0.9); // Damping
             
         } else if (this.isDribbling && (dist2D > controlDist * 1.5 || ballIsMovingFast)) {
             // Lost the ball - either too far or was kicked
@@ -329,7 +343,7 @@ class SoccerPhysicsClass {
             kickDir.x += 0.5;
             kickDir.normalize();
             
-            const power = 0.8 + this.controlledPlayer.getPassAccuracy() * 0.5;
+            const power = 0.4 + this.controlledPlayer.getPassAccuracy() * 0.3; // Reduced from 0.8+
             // Chip it over defenders
             this.ball.kick(kickDir, power, 0, 'home', 0.35);
             
@@ -340,7 +354,7 @@ class SoccerPhysicsClass {
         // Lob pass - high arc over defense
         if (lobPass && !this.isChargingKick) {
             const kickDir = this.getKickDirection();
-            const power = 0.6 + this.controlledPlayer.getPassAccuracy() * 0.4;
+            const power = 0.4 + this.controlledPlayer.getPassAccuracy() * 0.2; // Reduced from 0.6+
             // High lob
             this.ball.kick(kickDir, power, 0, 'home', 0.7);
             
@@ -351,7 +365,7 @@ class SoccerPhysicsClass {
         // Soft pass - stays on the ground
         if (this.inputManager.isKeyDown('KeyF') && !this.isChargingKick) {
             const kickDir = this.getKickDirection();
-            const power = 0.3 + this.controlledPlayer.getPassAccuracy() * 0.3;
+            const power = 0.2 + this.controlledPlayer.getPassAccuracy() * 0.2; // Reduced from 0.3+
             // Ground pass - no lift
             this.ball.kick(kickDir, power, 0, 'home', 0);
             

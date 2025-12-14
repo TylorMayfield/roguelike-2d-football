@@ -28,87 +28,111 @@ export class SoccerBall {
     public lastTouchedBy: 'home' | 'away' | null = null;
     
     // Visual scaling
-    private readonly baseScale: number = 0.8; // Ball radius scaled to match players
-    private readonly maxHeightScale: number = 1.5; // Ball appears larger when high
+    private readonly baseScale: number = 1.0; 
+    private readonly maxHeightScale: number = 1.3;
+    
+    // Visuals
+    private sprite: THREE.Sprite;
     
     constructor() {
         this.position = new THREE.Vector3(0, 0, 0);
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.spin = new THREE.Vector3(0, 0, 0);
         
-        // Create shadow mesh (always on ground)
-        const shadowGeometry = new THREE.CircleGeometry(0.8, 16);
+        // Create shadow mesh (simple dark circle)
+        const shadowGeometry = new THREE.CircleGeometry(0.3, 16);
         const shadowMaterial = new THREE.MeshBasicMaterial({ 
             color: 0x000000,
             transparent: true,
-            opacity: 0.3,
-            side: THREE.DoubleSide 
+            opacity: 0.3
         });
         this.shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
         this.shadow.position.z = 0.05;
         
-        // Create ball mesh with soccer ball pattern
+        // Create Ball Sprite
+        this.mesh = new THREE.Mesh(); // Dummy wrapper? No, let's use the Sprite directly as 'mesh' property type is Mesh... 
+        // Actually, existing code expects 'mesh' to be a Mesh. Let's wrap the sprite in a Group so we can rotate it? 
+        // Or just use a plane mesh with transparent texture for "pixel art" which allows 3D rotation?
+        // Let's use Sprite for "facing camera" look but we want it to rotate? 
+        // 2D Pixel art balls usually rotate by changing frames. 
+        // For simplicity, let's just rotate the sprite itself (Z rotation) for roll effect.
+        
+        // Wait, 'mesh' needs to be THREE.Mesh for type safety with existing code?
+        // The previous code had 'public mesh: THREE.Mesh'. We should probably change it to THREE.Object3D or just return a Mesh with a plane geometry.
+        // Let's use a PlaneGeometry for the "Sprite" so we can rotate it 
+        
         const ballCanvas = this.createBallTexture();
         const ballTexture = new THREE.CanvasTexture(ballCanvas);
-        const geometry = new THREE.CircleGeometry(0.8, 24);
+        ballTexture.magFilter = THREE.NearestFilter;
+        ballTexture.minFilter = THREE.NearestFilter;
+        
+        const geometry = new THREE.PlaneGeometry(0.6, 0.6); // Square for sprite
         const material = new THREE.MeshBasicMaterial({ 
             map: ballTexture,
-            side: THREE.DoubleSide 
+            transparent: true,
+            side: THREE.DoubleSide
         });
         this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.position.z = 0.1;
+        this.mesh.position.z = 0.2;
     }
     
     private createBallTexture(): HTMLCanvasElement {
+        // Generate a 12x12 pixel ball pattern
+        const size = 12;
         const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
+        canvas.width = size * 8; // Scale up
+        canvas.height = size * 8;
         const ctx = canvas.getContext('2d')!;
+        ctx.imageSmoothingEnabled = false;
         
-        // White background
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        ctx.arc(32, 32, 30, 0, Math.PI * 2);
-        ctx.fill();
+        // Draw low-res ball
+        const tempC = document.createElement('canvas');
+        tempC.width = size; tempC.height = size;
+        const tCtx = tempC.getContext('2d')!;
         
-        // Black pentagons pattern
-        ctx.fillStyle = '#1a1a1a';
-        const pentagonPositions = [
-            { x: 32, y: 32, size: 10 },  // Center
-            { x: 18, y: 18, size: 6 },   // Top-left
-            { x: 46, y: 18, size: 6 },   // Top-right
-            { x: 18, y: 46, size: 6 },   // Bottom-left
-            { x: 46, y: 46, size: 6 },   // Bottom-right
-        ];
+        // White circle
+        tCtx.fillStyle = '#ffffff';
+        tCtx.beginPath();
+        tCtx.arc(6, 6, 5, 0, Math.PI * 2);
+        tCtx.fill();
         
-        pentagonPositions.forEach(p => {
-            this.drawPentagon(ctx, p.x, p.y, p.size);
-        });
+        // Black spots (pixels)
+        tCtx.fillStyle = '#222222';
+        // Center spot
+        tCtx.fillRect(5, 5, 2, 2);
+        // Side spots
+        tCtx.fillRect(2, 4, 2, 1);
+        tCtx.fillRect(8, 7, 2, 1);
+        tCtx.fillRect(5, 2, 2, 1);
+        tCtx.fillRect(4, 9, 2, 1);
         
-        // Subtle edge shading
-        const gradient = ctx.createRadialGradient(24, 24, 0, 32, 32, 32);
-        gradient.addColorStop(0, 'rgba(255,255,255,0.3)');
-        gradient.addColorStop(0.7, 'rgba(0,0,0,0)');
-        gradient.addColorStop(1, 'rgba(0,0,0,0.2)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(32, 32, 30, 0, Math.PI * 2);
-        ctx.fill();
+        // Outline (Cell Shading)
+        // Scan and outline
+        const pixels = tCtx.getImageData(0,0,size,size).data;
+        tCtx.fillStyle = '#000000';
+        for (let y=0; y<size; y++) {
+            for (let x=0; x<size; x++) {
+                const i = (y*size + x) * 4;
+                if (pixels[i+3] === 0) { // Transparent
+                    // Check neighbors for solid
+                    let hasSolid = false;
+                    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
+                        const nx = x+dx, ny = y+dy;
+                        if (nx>=0 && nx<size && ny>=0 && ny<size) {
+                            const ni = (ny*size + nx) * 4;
+                            if (pixels[ni+3] > 0) hasSolid = true;
+                        }
+                    });
+                    if (hasSolid) tCtx.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+        
+        // Scale up to main canvas
+        ctx.scale(8, 8);
+        ctx.drawImage(tempC, 0, 0);
         
         return canvas;
-    }
-    
-    private drawPentagon(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) {
-        ctx.beginPath();
-        for (let i = 0; i < 5; i++) {
-            const angle = (i * 2 * Math.PI / 5) - Math.PI / 2;
-            const x = cx + size * Math.cos(angle);
-            const y = cy + size * Math.sin(angle);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.fill();
     }
     
     /**
@@ -268,7 +292,8 @@ export class SoccerBall {
         const distance = direction.length();
         
         // Calculate power based on distance
-        const power = Math.min(1.8, 0.3 + distance * 0.04);
+        // Drastically reduced for realistic speed (0.3 to 0.7 range)
+        const power = Math.min(0.7, 0.3 + distance * 0.02);
         
         // Determine lift based on pass type
         let lift = 0;
@@ -300,8 +325,9 @@ export class SoccerBall {
         shooter: 'home' | 'away' = 'home',
         lift: number = 0.2 // Default slight lift for shots
     ) {
-        // Shots are more powerful
-        const shotPower = power * 2.5;
+        // Shots are more powerful but not rocket-powered
+        // Reduced to 0.4 multiplier (Input 1.0-2.0 -> Speed 0.4-0.8)
+        const shotPower = power * 0.4;
         this.kick(direction, shotPower, curve, shooter, lift);
         
         console.log(`SHOT! Power: ${shotPower.toFixed(2)}, Curve: ${curve.toFixed(2)}, Lift: ${lift.toFixed(2)}`);
